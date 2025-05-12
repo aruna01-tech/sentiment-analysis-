@@ -1,0 +1,45 @@
+# Install required packages (uncomment if not installed)
+# !pip install snscrape pandas transformers torch
+
+import snscrape.modules.twitter as sntwitter
+import pandas as pd
+from transformers import pipeline
+import re
+import matplotlib.pyplot as plt
+
+# 1. SCRAPE TWEETS
+query = "pandas library code since:2024-01-01 until:2025-01-01"
+tweets = []
+for i, tweet in enumerate(sntwitter.TwitterSearchScraper(query).get_items()):
+    if i > 100:  # Limit to 100 tweets for speed
+        break
+    tweets.append([tweet.date, tweet.user.username, tweet.content])
+
+df = pd.DataFrame(tweets, columns=["Date", "User", "Tweet"])
+
+# 2. CLEAN TEXT
+def clean_text(text):
+    text = re.sub(r"http\S+|@\S+|#\S+|[^A-Za-z0-9\s]", "", text)
+    return text.lower().strip()
+
+df["Clean_Tweet"] = df["Tweet"].apply(clean_text)
+
+# 3. EMOTION DETECTION USING TRANSFORMERS
+emotion_classifier = pipeline("text-classification", model="j-hartmann/emotion-english-distilroberta-base", return_all_scores=True)
+
+def extract_top_emotion(text):
+    result = emotion_classifier(text)[0]
+    top_emotion = max(result, key=lambda x: x['score'])
+    return top_emotion['label']
+
+df["Top_Emotion"] = df["Clean_Tweet"].apply(extract_top_emotion)
+
+# 4. DISPLAY RESULTS
+print(df[["Tweet", "Top_Emotion"]].head())
+
+# 5. PLOT EMOTION DISTRIBUTION
+df["Top_Emotion"].value_counts().plot(kind='bar', title='Top Emotions in Tweets About Pandas Code')
+plt.xlabel("Emotion")
+plt.ylabel("Number of Tweets")
+plt.tight_layout()
+plt.show()
